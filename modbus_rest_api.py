@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from starlette.middleware.cors import CORSMiddleware
 from pymodbus.client import ModbusTcpClient
 import socket
 import struct
@@ -22,9 +23,15 @@ devices = {
     "tripower_str2_power": {"ip": "192.168.188.45", "register": 30961, "slave": 3, "signed": False},
     "tripower_str3_power": {"ip": "192.168.188.45", "register": 30967, "slave": 3, "signed": False},
 
-    "batteryPower": {"ip": "192.168.188.117", "register": 30775, "slave": 3, "signed": True},
-    "SoC": {"ip": "192.168.188.117", "register": 30845, "slave": 3, "signed": False},
+    "battery_power": {"ip": "192.168.188.117", "register": 30775, "slave": 3, "signed": True},
+    "battery_SoC": {"ip": "192.168.188.117", "register": 30845, "slave": 3, "signed": False},
 }
+
+# Allowed CORS origins hinzufügen
+origins = [
+    "http://localhost:4200",  # Erlaube die Verbindung von Angular-Frontend
+    "http://127.0.0.1:4200",  # Falls du von einer anderen IP aus zugreifst
+]
 
 # Modbus read function
 def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
@@ -54,7 +61,15 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-@app.get("/power-data")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["GET"],  # Allow get only
+    allow_headers=["*"],
+)
+
+@app.get("/solar-data")
 def get_power_data():
     data = {}
     
@@ -65,8 +80,8 @@ def get_power_data():
     data["tripower_str3_power"] = read_modbus_data(**devices["tripower_str3_power"])
     
     # Read battery data
-    data["batteryPower"] = read_modbus_data(**devices["batteryPower"])
-    data["SoC"] = read_modbus_data(**devices["SoC"])
+    data["battery_power"] = read_modbus_data(**devices["battery_power"])
+    data["battery_SoC"] = read_modbus_data(**devices["battery_SoC"])
     
     data["grid_power"] = round(grid_power / 10)
     data["emeter_power"] = round(emeter_power / 10)
@@ -74,7 +89,7 @@ def get_power_data():
     # Calculate house power
     data["consumption"] = (
         (data["tripower_power"] or 0) + (data["emeter_power"] or 0)
-        - (data["grid_power"] or 0) - (data["batteryPower"] or 0)
+        - (data["grid_power"] or 0) - (data["battery_power"] or 0)
     )
     
     return data
@@ -108,9 +123,6 @@ async def udp_listener():
 
         except Exception as e:
             print(f"⚠️ Error in UDP server: {e}")
-
-
-
 
 
 # Running:
