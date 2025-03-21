@@ -6,6 +6,13 @@ import struct
 import asyncio
 from contextlib import asynccontextmanager
 
+UDP_IP = "192.168.188.39"
+UDP_PORT = 9522
+
+TRIPOWER_IP = "192.168.188.45"
+SUNNY_ISLAND_IP = "192.168.188.117"
+MODBUS_PORT = 502
+
 app = FastAPI()
 
 # Global variables for UDP data
@@ -18,13 +25,13 @@ def combine_registers(high, low):
 
 # Device configuration
 devices = {
-    "tripower_total_power": {"ip": "192.168.188.45", "register": 30775, "slave": 3, "signed": False},
-    "tripower_str1_power": {"ip": "192.168.188.45", "register": 30773, "slave": 3, "signed": False},
-    "tripower_str2_power": {"ip": "192.168.188.45", "register": 30961, "slave": 3, "signed": False},
-    "tripower_str3_power": {"ip": "192.168.188.45", "register": 30967, "slave": 3, "signed": False},
+    "tripower_total_power": {"ip": TRIPOWER_IP, "register": 30775, "slave": 3, "signed": False},
+    "tripower_str1_power": {"ip": TRIPOWER_IP, "register": 30773, "slave": 3, "signed": False},
+    "tripower_str2_power": {"ip": TRIPOWER_IP, "register": 30961, "slave": 3, "signed": False},
+    "tripower_str3_power": {"ip": TRIPOWER_IP, "register": 30967, "slave": 3, "signed": False},
 
-    "battery_power": {"ip": "192.168.188.117", "register": 30775, "slave": 3, "signed": True},
-    "battery_SoC": {"ip": "192.168.188.117", "register": 30845, "slave": 3, "signed": False},
+    "battery_power": {"ip": SUNNY_ISLAND_IP, "register": 30775, "slave": 3, "signed": True},
+    "battery_SoC": {"ip": SUNNY_ISLAND_IP, "register": 30845, "slave": 3, "signed": False},
 }
 
 # Allowed CORS origins hinzufügen
@@ -36,7 +43,7 @@ origins = [
 # Modbus read function
 def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
     try:
-        client = ModbusTcpClient(ip, port=502, timeout=10)
+        client = ModbusTcpClient(ip, port=MODBUS_PORT, timeout=10)
         client.connect()
         response = client.read_holding_registers(register, count=2, slave=slave)
         client.close()
@@ -98,9 +105,6 @@ def get_power_data():
 async def udp_listener():
     global grid_power, emeter_power
     
-    UDP_IP = "192.168.188.39"
-    UDP_PORT = 9522
-
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((UDP_IP, UDP_PORT))
     sock.setblocking(False)  # Make socket non-blocking
