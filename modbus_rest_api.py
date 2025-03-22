@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from pymodbus.client import ModbusTcpClient
+from pymodbus.client import ModbusTcpClient # older versions pymodbus.client.sync
 import socket
 import struct
 import asyncio
@@ -16,8 +16,8 @@ MODBUS_PORT = 502
 app = FastAPI()
 
 # Global variables for UDP data
-grid_power = 0
-emeter_power = 0
+grid_power = 0 # negative == feed_in, positive == consumption
+emeter_power = 0 # positive == production
 
 # values are in two registers
 def combine_registers(high, low):
@@ -45,7 +45,7 @@ def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
     try:
         client = ModbusTcpClient(ip, port=MODBUS_PORT, timeout=10)
         client.connect()
-        response = client.read_holding_registers(register, count=2, slave=slave)
+        response = client.read_holding_registers(register, count=2, slave=slave) # older versions unit instead of slave
         client.close()
         if response and response.registers:
             value = combine_registers(response.registers[0], response.registers[1])
@@ -96,7 +96,7 @@ def get_power_data():
     # Calculate house power
     data["consumption"] = (
         (data["tripower_power"] or 0) + (data["emeter_power"] or 0)
-        - (data["grid_power"] or 0) - (data["battery_power"] or 0)
+        + (data["grid_power"] or 0) + (data["battery_power"] or 0)
     )
     
     return data
@@ -120,7 +120,11 @@ async def udp_listener():
                 ip, _ = addr
 
                 if ip == '192.168.188.54':  # Grid meter
-                    grid_power = struct.unpack(">I", data[52:56])[0]
+                    feed_in = struct.unpack(">I", data[52:56])[0]
+                    if (feed_in == 0):
+                        grid_power = struct.unpack(">I", data[32:36])[0]
+                    else:
+                        grid_power = -1 * feed_in
 
                 if ip == '192.168.188.87':  # Energy meter
                     emeter_power = struct.unpack(">I", data[52:56])[0]
