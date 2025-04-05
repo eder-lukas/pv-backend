@@ -50,7 +50,7 @@ def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
         if response and response.registers:
             value = combine_registers(response.registers[0], response.registers[1])
             if signed:
-                return int.from_bytes(value.to_bytes(length=4), byteorder="big", signed=True)
+                return int.from_bytes(value.to_bytes(length=4), byteorder="big", signed=signed)
             else:
                 return value
         else:
