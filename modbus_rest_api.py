@@ -25,13 +25,13 @@ def combine_registers(high, low):
 
 # Device configuration
 devices = {
-    "tripower_total_power": {"ip": TRIPOWER_IP, "register": 30775, "slave": 3, "signed": False},
-    "tripower_str1_power": {"ip": TRIPOWER_IP, "register": 30773, "slave": 3, "signed": False},
-    "tripower_str2_power": {"ip": TRIPOWER_IP, "register": 30961, "slave": 3, "signed": False},
-    "tripower_str3_power": {"ip": TRIPOWER_IP, "register": 30967, "slave": 3, "signed": False},
+    "tripower_total_power": {"ip": TRIPOWER_IP, "register": 30775, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
+    "tripower_str1_power": {"ip": TRIPOWER_IP, "register": 30773, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
+    "tripower_str2_power": {"ip": TRIPOWER_IP, "register": 30961, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
+    "tripower_str3_power": {"ip": TRIPOWER_IP, "register": 30967, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
 
-    "battery_power": {"ip": SUNNY_ISLAND_IP, "register": 30775, "slave": 3, "signed": True},
-    "battery_SoC": {"ip": SUNNY_ISLAND_IP, "register": 30845, "slave": 3, "signed": False},
+    "battery_power": {"ip": SUNNY_ISLAND_IP, "register": 30775, "slave": 3, "signed": True, "NaN-Value": 0x80000000},
+    "battery_SoC": {"ip": SUNNY_ISLAND_IP, "register": 30845, "slave": 3, "signed": False, "NaN-Value": 0xFFFFFFFF},
 }
 
 # Allowed CORS origins hinzufügen
@@ -41,7 +41,7 @@ origins = [
 ]
 
 # Modbus read function
-def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
+def read_modbus_data(ip: str, register: int, slave: int, signed: bool, nan_value: int):
     try:
         client = ModbusTcpClient(ip, port=MODBUS_PORT, timeout=10)
         client.connect()
@@ -49,8 +49,10 @@ def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
         client.close()
         if response and response.registers:
             value = combine_registers(response.registers[0], response.registers[1])
+            if (value == nan_value):
+                return 0
             if signed:
-                return int.from_bytes(value.to_bytes(length=4), byteorder="big", signed=signed)
+                return int.from_bytes(value.to_bytes(length=4), byteorder="big", signed=True)
             else:
                 return value
         else:
