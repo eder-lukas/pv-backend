@@ -25,13 +25,13 @@ def combine_registers(high, low):
 
 # Device configuration
 devices = {
-    "tripower_total_power": {"ip": TRIPOWER_IP, "register": 30775, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
-    "tripower_str1_power": {"ip": TRIPOWER_IP, "register": 30773, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
-    "tripower_str2_power": {"ip": TRIPOWER_IP, "register": 30961, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
-    "tripower_str3_power": {"ip": TRIPOWER_IP, "register": 30967, "slave": 3, "signed": False, "NaN-Value": 0x80000000},
+    "tripower_total_power": {"ip": TRIPOWER_IP, "register": 30775, "slave": 3, "signed": False, "nan_value": 0x80000000},
+    "tripower_str1_power": {"ip": TRIPOWER_IP, "register": 30773, "slave": 3, "signed": False, "nan_value": 0x80000000},
+    "tripower_str2_power": {"ip": TRIPOWER_IP, "register": 30961, "slave": 3, "signed": False, "nan_value": 0x80000000},
+    "tripower_str3_power": {"ip": TRIPOWER_IP, "register": 30967, "slave": 3, "signed": False, "nan_value": 0x80000000},
 
-    "battery_power": {"ip": SUNNY_ISLAND_IP, "register": 30775, "slave": 3, "signed": True, "NaN-Value": 0x80000000},
-    "battery_SoC": {"ip": SUNNY_ISLAND_IP, "register": 30845, "slave": 3, "signed": False, "NaN-Value": 0xFFFFFFFF},
+    "battery_power": {"ip": SUNNY_ISLAND_IP, "register": 30775, "slave": 3, "signed": True, "nan_value": 0x80000000},
+    "battery_SoC": {"ip": SUNNY_ISLAND_IP, "register": 30845, "slave": 3, "signed": False, "nan_value": 0xFFFFFFFF},
 }
 
 # Allowed CORS origins hinzufügen
