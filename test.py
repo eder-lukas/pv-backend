@@ -3,26 +3,16 @@ from pymodbus.client import ModbusTcpClient # older versions pymodbus.client.syn
 
 MODBUS_PORT = 502
 
-# values are in two registers
-def combine_registers(high, low):
-    print(high << 16)
-    print(low)
-    return (high << 16) + low
-
 # Modbus read function
-def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
+def read_modbus_data(ip: str, register: int, slave: int):
     try:
         client = ModbusTcpClient(ip, port=MODBUS_PORT, timeout=10)
         client.connect()
-        response = client.read_holding_registers(register, count=2, slave=slave) # older versions unit instead of slave
+        response = client.read_holding_registers(register, count=1, slave=slave) # older versions unit instead of slave
+        print(response)
         client.close()
         if response and response.registers:
-            value = combine_registers(32768, 0)
-            # value = combine_registers(response.registers[0], response.registers[1])
-            if signed:
-                return int.from_bytes(value.to_bytes(length=4), byteorder="big", signed=True)
-            else:
-                return value
+            return response.registers[0]
         else:
             return 0  # Return 0 if the register is empty or there is no valid response
     except Exception as e:
@@ -30,13 +20,34 @@ def read_modbus_data(ip: str, register: int, slave: int, signed: bool):
         return 0  # Return 0 in case of an exception
 
 
-value = read_modbus_data("192.168.188.45", 30775, 3, True)
-print(bin(value))
+def write_modbus_data(ip: str, register: int, slave: int, value: int):
+    try:
+        client = ModbusTcpClient(ip, port=MODBUS_PORT, timeout=10)
+        connection = client.connect()
+
+        if connection:
+            response = client.write_register(register, value, slave=slave)
+            print(response)
+        else:
+            print("Failed to connect to Modbus Server")
+
+        client.close()
+
+    except Exception as e:
+        print(f"Error writing to {ip}:{register} - {e}")
+
+
+
+value = read_modbus_data("192.168.188.94", 1000, 1)
 print(value)
-print(0x8000)
-# value = combine_registers(b'\F0\00', b'\00\00')
-# print(int.from_bytes(value.to_bytes(length=4), byteorder="big", signed=True))
-# high = int.from_bytes(b'\F0\00', byteorder='big', signed=True)
-# low = int.from_bytes(b'\00\00')
-# print(bin(high))
-# 1000 0000 0000 0000 0000 0000 0000
+write_modbus_data("192.168.188.94", 1000, 1, 6)
+value = read_modbus_data("192.168.188.94", 1000, 1)
+print(value)
+
+
+
+
+# juice charger me mit slave id 1 und ip 192.168.188.94
+# lese register 122 1 byte für cp connection state (1-A: EV disconnected; 2-B: EV connected; 3-C: EV charge; 4-D: EV charge (ventilation required); 5-E: Error condition; 6-F: Fault condition)
+# lese register 706 1 byte für signaled_current (maxumum current for ev charging)
+# lese/schreibe Register 1000 für max-current regelung
