@@ -132,8 +132,8 @@ async def data_collection():
 # Background task for EV charging regulation
 async def ev_charging_regulation():
     while True:
+        print("✅ EV charging regulation task started...")
         try:
-            print("✅ EV charging regulation task started...")
             if shared_state.is_solar_only_charging:
                 regulate_ev_charging()
             else:

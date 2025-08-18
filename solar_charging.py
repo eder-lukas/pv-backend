@@ -41,7 +41,8 @@ def regulate_ev_charging():
 # minimum current 6A - pause current 0A
 def calculate_and_set_max_current():
     # calculate if power is drained from the grid and/or battery
-    excess_power = (shared_state.grid_power + shared_state.battery_power) * (-1)
+    excess_power = shared_state.grid_power * (-1) - shared_state.battery_power
+    excess_power = excess_power // 10
     # subtract the power delta which should always be available
     excess_power = excess_power - POWER_DELTA
     
