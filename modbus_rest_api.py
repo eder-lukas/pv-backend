@@ -8,8 +8,8 @@ from solar_charging import regulate_ev_charging, charging_states
 from modbus_interaction import write_modbus_data, read_sma_modbus_data, read_wallbox_modbus_data, sma_devices, ev_charging_modbus_registers
 import shared_state
 
-
-UDP_IP = "192.168.188.39"
+# Change this address to the local interface address
+UDP_IP = "192.168.188.205"
 UDP_PORT = 9522
 
 DATA_COLLECTION_DELAY = 0.5 # Delay between loop iterations for getting some udp/modbus data
@@ -29,8 +29,8 @@ origins = [
 # FastAPI lifespan event to manage background tasks
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    data_collection_task = asyncio.create_task(data_collection_task())
-    ev_regulation_task = asyncio.create_task(ev_charging_regulation_task())
+    data_collection_task = asyncio.create_task(data_collection())
+    ev_regulation_task = asyncio.create_task(ev_charging_regulation())
     
     yield  # API runs while this runs in the background
     
@@ -103,7 +103,7 @@ def set_solar_only_charging(enable: bool = Query(..., description="True = Nur So
 
 # Background task for data collection (UDP and Modbus data)
 # Collects grid and emeter power information from udp messages and battery power and SoC information via modbus
-async def data_collection_task():
+async def data_collection():
     print("✅ Data collection task started...")
     
     # UDP socket for grid_power and emeter_power data collection
@@ -130,7 +130,7 @@ async def data_collection_task():
             print(f"⚠️ Error in data collection task: {e}")
 
 # Background task for EV charging regulation
-async def ev_charging_regulation_task():
+async def ev_charging_regulation():
     while True:
         try:
             print("✅ EV charging regulation task started...")
