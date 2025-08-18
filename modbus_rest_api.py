@@ -4,7 +4,6 @@ import socket
 import struct
 import asyncio
 from contextlib import asynccontextmanager
-from time import sleep
 from solar_charging import regulate_ev_charging, charging_states
 from modbus_interaction import write_modbus_data, read_sma_modbus_data, read_wallbox_modbus_data, sma_devices, ev_charging_modbus_registers
 from shared_state import grid_power, emeter_power, battery_power, battery_SoC, ev_charging_state, ev_max_current, is_solar_only_charging
@@ -40,7 +39,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["GET"],  # Allow get only
+    allow_methods=["GET", "POST"],  # Allow GET for getting and POST for setting solar-charging-only bool
     allow_headers=["*"],
 )
 
@@ -56,24 +55,23 @@ def get_power_data():
     data["tripower_str2_power"] = read_sma_modbus_data(**sma_devices["tripower_str2_power"])
     data["tripower_str3_power"] = read_sma_modbus_data(**sma_devices["tripower_str3_power"])
     
-    # Read battery data
+    # Use global data (updated by background task)
     data["battery_power"] = battery_power
     data["battery_SoC"] = battery_SoC
     
     data["grid_power"] = round(grid_power / 10)
     data["emeter_power"] = round(emeter_power / 10)
 
+    data["charging_state"] = charging_states.get(ev_charging_state, "Unknown")
+    data["maximum_current"] = ev_max_current
+    data["solar_only_charging"] = is_solar_only_charging
+    
     # Calculate house power
     data["consumption"] = (
         (data["tripower_power"] or 0) + (data["emeter_power"] or 0)
         + (data["grid_power"] or 0) + (data["battery_power"] or 0)
     )
 
-    # Add EV Charging data
-    data["charging_state"] = charging_states[ev_charging_state]
-    data["maximum_current"] = ev_max_current
-    data["solar_only_charging"] = is_solar_only_charging
-    
     return data
 
 
@@ -103,24 +101,27 @@ async def async_task():
     loop = asyncio.get_running_loop()
 
     while True:
-        await get_grid_and_emeter_power(loop, sock)
-        get_battery_power_and_soc()
+        try:
+            await get_grid_and_emeter_power(loop, sock)
+            get_battery_power_and_soc()
+            get_ev_charging_data()
 
-        if is_solar_only_charging:
-            regulate_ev_charging()
-        else: 
-            ev_max_current = read_wallbox_modbus_data(**sma_devices["maximum_current"])
-            if (ev_max_current != 16):
-                write_modbus_data(**ev_charging_modbus_registers["maximum_current"], value=16)
-        
-        sleep(REGULATION_DELAY)
-
+            if is_solar_only_charging:
+                regulate_ev_charging()
+            else:
+                ev_max_current = read_wallbox_modbus_data(**ev_charging_modbus_registers["maximum_current"])
+                if (ev_max_current != 16):
+                    write_modbus_data(**ev_charging_modbus_registers["maximum_current"], value=16)
+            
+            await asyncio.sleep(REGULATION_DELAY)
+        except Exception as e:
+            print(f"⚠️ Error in main loop: {e}")
 
 # getting grid and emeter power from UDP packets
 async def get_grid_and_emeter_power(loop, sock):
     global grid_power, emeter_power
     try:
-        data, addr = await loop.sock_recvfrom(sock, 1024)  # Proper async recv
+        data, addr = await asyncio.wait_for(loop.sock_recvfrom(sock, 1024), timeout=1)
         if data[:3] == b"SMA":  # Check if the packet is from SMA
             ip, _ = addr
 
@@ -131,7 +132,7 @@ async def get_grid_and_emeter_power(loop, sock):
                 else:
                     grid_power = -1 * feed_in
 
-            if ip == '192.168.188.87':  # Energy meter
+            elif ip == '192.168.188.87':  # Energy meter
                 emeter_power = struct.unpack(">I", data[52:56])[0]
 
     except Exception as e:
@@ -140,9 +141,34 @@ async def get_grid_and_emeter_power(loop, sock):
 
 def get_battery_power_and_soc():
     global battery_power, battery_SoC
-    battery_power = read_sma_modbus_data(**sma_devices["battery_power"])
-    battery_SoC = read_sma_modbus_data(**sma_devices["battery_SoC"])
+    try:
+        new_battery_power = read_sma_modbus_data(**sma_devices["battery_power"])
+        new_battery_soc = read_sma_modbus_data(**sma_devices["battery_SoC"])
+        
+        if new_battery_power is not None:
+            battery_power = new_battery_power
+        
+        if new_battery_soc is not None:
+            battery_SoC = new_battery_soc
+            
+    except Exception as e:
+        print(f"⚠️ Error reading battery data: {e}")
 
+
+def get_ev_charging_data():
+    global ev_charging_state, ev_max_current
+    try:
+        new_charging_state = read_wallbox_modbus_data(**ev_charging_modbus_registers["charging_state"])
+        new_max_current = read_wallbox_modbus_data(**ev_charging_modbus_registers["maximum_current"])
+        
+        if new_charging_state is not None:
+            ev_charging_state = new_charging_state
+        
+        if new_max_current is not None:
+            ev_max_current = new_max_current
+            
+    except Exception as e:
+        print(f"⚠️ Error reading EV charging data: {e}")
 
 # Running:
 # uvicorn modbus_rest_api:app --host localhost --port 8000 --reload

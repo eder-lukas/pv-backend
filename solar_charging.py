@@ -1,6 +1,6 @@
 import math
 from modbus_interaction import read_wallbox_modbus_data, ev_charging_modbus_registers, write_modbus_data
-from shared_state import grid_power, battery_power
+from shared_state import grid_power, battery_power, ev_charging_state, ev_max_current
 
 
 POWER_DELTA = 200 # Power in W, which should always be available as a buffer, even when the car is charging
@@ -26,8 +26,13 @@ charging_states = {
 def regulate_ev_charging():
     global ev_charging_state, ev_max_current
 
-    ev_charging_state = read_wallbox_modbus_data(**ev_charging_modbus_registers["charging_state"])
-    ev_max_current = read_wallbox_modbus_data(**ev_charging_modbus_registers["maximum_current"])
+    # Read current values from Modbus
+    current_charging_state = read_wallbox_modbus_data(**ev_charging_modbus_registers["charging_state"])
+    current_max_current = read_wallbox_modbus_data(**ev_charging_modbus_registers["maximum_current"])
+    if current_charging_state is not None:
+        ev_charging_state = current_charging_state
+    if current_max_current is not None:
+        ev_max_current = current_max_current
 
     if (ev_charging_state >= 2 and ev_charging_state <= 4):
         calculate_and_set_max_current()
@@ -38,6 +43,7 @@ def regulate_ev_charging():
 # battery should not be drained for ev charging
 # minimum current 6A - pause current 0A
 def calculate_and_set_max_current():
+    global ev_max_current, grid_power, battery_power
     # calculate if power is drained from the grid and/or battery
     excess_power = (grid_power + battery_power) * (-1)
     # subtract the power delta which should always be available
@@ -61,6 +67,7 @@ def check_for_charging_start(excess_power: int):
 
 # check if more current is possible
 def check_for_power_increase(excess_power: int):
+    global ev_max_current
     current_increase = math.floor(excess_power / ONE_AMP_DELTA_POWER) # floor always
 
     new_current = ev_max_current + current_increase
@@ -73,6 +80,7 @@ def check_for_power_increase(excess_power: int):
 
 # check if less current or charging pause is necessary
 def check_for_power_decrease(excess_power: int):
+    global ev_max_current
     current_reduction = math.ceil((excess_power * (-1)) / ONE_AMP_DELTA_POWER) # round up always
 
     new_current = ev_max_current - current_reduction
