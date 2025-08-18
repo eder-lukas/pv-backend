@@ -12,7 +12,6 @@ import shared_state
 UDP_IP = "192.168.188.205"
 UDP_PORT = 9522
 
-DATA_COLLECTION_DELAY = 0.5 # Delay between loop iterations for getting some udp/modbus data
 EV_CHARGING_REGULATION_DELAY = 15 # Delay between loop iterations for adjusting the ev charging current
 
 
@@ -121,7 +120,6 @@ async def data_collection():
             get_battery_power_and_soc()
             get_ev_charging_data()
 
-            await asyncio.sleep(DATA_COLLECTION_DELAY)
         except asyncio.CancelledError:
             print("🛑 Data collection task cancelled")
             sock.close()
