@@ -1,6 +1,6 @@
 import math
 from modbus_interaction import read_wallbox_modbus_data, ev_charging_modbus_registers, write_modbus_data
-from modbus_rest_api import grid_power, battery_power
+from shared_state import grid_power, battery_power
 
 
 POWER_DELTA = 200 # Power in W, which should always be available as a buffer, even when the car is charging
@@ -9,6 +9,18 @@ MIN_CHARGING_CURRENT = 6 # 6A minimum charging current
 MAX_CHARGING_CURRENT = 16 # 16A maximum charging current
 PAUSE_CHARGING_CURRENT = 0 # Charging current setting for pausing the charging process
 MIN_CHARGING_START_POWER = 2*230*MIN_CHARGING_CURRENT # two phases, minimum charging current
+
+
+charging_states = {
+    0: "Not available",
+    1: "A: EV disconnected",
+    2: "B: EV connected",
+    3: "C: EV charge",
+    4: "D: EV charge (ventilation required)",
+    5: "E: Error condition",
+    6: "F: Fault condition"
+}
+
 
 # regulates the ev charging max current, so that no power is drained from the battery and there is always the POWER_DELTA available (e.g. for home battery charging or grid feed in)
 def regulate_ev_charging():

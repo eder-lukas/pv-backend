@@ -1,12 +1,13 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from starlette.middleware.cors import CORSMiddleware
 import socket
 import struct
 import asyncio
 from contextlib import asynccontextmanager
 from time import sleep
-from solar_charging import regulate_ev_charging
+from solar_charging import regulate_ev_charging, charging_states
 from modbus_interaction import write_modbus_data, read_sma_modbus_data, read_wallbox_modbus_data, sma_devices, ev_charging_modbus_registers
+from shared_state import grid_power, emeter_power, battery_power, battery_SoC, ev_charging_state, ev_max_current, is_solar_only_charging
 
 
 UDP_IP = "192.168.188.39"
@@ -16,25 +17,6 @@ REGULATION_DELAY = 0.5 # Delay between loop iterations for getting some udp/modb
 
 
 app = FastAPI()
-
-# Global variables for UDP data
-grid_power = 0 # in W, negative == feed_in, positive == consumption
-emeter_power = 0 # in W, positive == production
-battery_power = 0 # in W, negative = charging, positive = discharging
-battery_SoC = 0 # percentage, int
-ev_charging_state = 0 # 1-6
-ev_max_current = 0 # 0-16
-is_solar_only_charging = True # Boolean, if instant charging or solar charging is activated
-
-charging_states = {
-    0: "Not available",
-    1: "A: EV disconnected",
-    2: "B: EV connected",
-    3: "C: EV charge",
-    4: "D: EV charge (ventilation required)",
-    5: "E: Error condition",
-    6: "F: Fault condition"
-}
 
 # Allowed CORS origins hinzufügen
 origins = [
@@ -64,7 +46,7 @@ app.add_middleware(
 
 @app.get("/solar-data")
 def get_power_data():
-    global grid_power, emeter_power, battery_power, battery_SoC, ev_charging_state, ev_max_current, charging_states
+    global grid_power, emeter_power, battery_power, battery_SoC, ev_charging_state, ev_max_current, charging_states, is_solar_only_charging
     data = {}
 
     # Read solar power data
@@ -89,8 +71,21 @@ def get_power_data():
     # Add EV Charging data
     data["charging_state"] = charging_states[ev_charging_state]
     data["maximum_current"] = ev_max_current
+    data["solar_only_charging"] = is_solar_only_charging
     
     return data
+
+
+@app.post("/solar-only-charging")
+def set_solar_only_charging(enable: bool = Query(..., description="True = Nur Solarstrom laden, False = normaler Betrieb")):
+    global is_solar_only_charging
+
+    is_solar_only_charging = enable
+
+    return {
+        "success": True,
+        "solar_only_charging": is_solar_only_charging
+    }
 
 
 # Async while true loop
@@ -107,7 +102,7 @@ async def async_task():
     loop = asyncio.get_running_loop()
 
     while True:
-        get_grid_and_emeter_power(loop, sock)
+        await get_grid_and_emeter_power(loop, sock)
         get_battery_power_and_soc()
 
         if is_solar_only_charging:
@@ -120,7 +115,7 @@ async def async_task():
         sleep(REGULATION_DELAY)
 
 
-# getting grid and emeter power
+# getting grid and emeter power from UDP packets
 async def get_grid_and_emeter_power(loop, sock):
     global grid_power, emeter_power
     try:
