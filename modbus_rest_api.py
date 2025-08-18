@@ -20,8 +20,9 @@ app = FastAPI()
 
 # Allowed CORS origins hinzufügen
 origins = [
-    "http://localhost:4200",  # Erlaube die Verbindung von Angular-Frontend
-    "http://127.0.0.1:4200",  # Falls du von einer anderen IP aus zugreifst
+    "http://localhost:4200",
+    "http://127.0.0.1:4200",
+    "http://192.168.188.205:4200",
 ]
 
 
