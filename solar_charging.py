@@ -14,7 +14,7 @@ HOME_BAT_MIN_SOC = 95 # SoC of battery which must be reached before the charging
 
 
 charging_states = {
-    0: "Not available",
+    0: "No charging state available",
     1: "A: EV disconnected",
     2: "B: EV connected",
     3: "C: EV charge",
@@ -105,4 +105,5 @@ def check_for_power_decrease(excess_power: int):
 # only sets the new current, if it changed
 def set_charging_current(new_current):
     if new_current != shared_state.ev_max_current:
+        print("Setting Charging Current to new Value:", new_current, "A. Old Value:", shared_state.ev_max_current, "A")
         write_modbus_data(**ev_charging_modbus_registers["maximum_current"], value=new_current)
