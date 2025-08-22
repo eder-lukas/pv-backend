@@ -199,4 +199,4 @@ def get_ev_charging_data():
         print(f"⚠️ Error reading EV charging data: {e}")
 
 # Running:
-# uvicorn modbus_rest_api:app --host localhost --port 8000 --reload
+# uvicorn rest_api:app --host localhost --port 8000 [--reload]
