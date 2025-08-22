@@ -10,6 +10,7 @@ MIN_CHARGING_CURRENT = 6 # 6A minimum charging current
 MAX_CHARGING_CURRENT = 16 # 16A maximum charging current
 PAUSE_CHARGING_CURRENT = 0 # Charging current setting for pausing the charging process
 MIN_CHARGING_START_POWER = ONE_AMP_POWER * MIN_CHARGING_CURRENT # two phases, minimum charging current
+HOME_BAT_MIN_SOC = 95 # SoC of battery which must be reached before the charging power of the battery counts as excess power and could be used for charging
 
 
 charging_states = {
@@ -44,7 +45,8 @@ def regulate_ev_charging():
 def calculate_and_set_max_current():
     # calculate if power is drained from the grid and/or battery
     # grid power in 10W -> //10 (negative is feed in)
-    excess_power = shared_state.grid_power // -10 - shared_state.battery_power
+    excess_power = shared_state.grid_power // -10 + calculate_battery_power_for_excess()
+        
     # subtract the power delta which should always be available
     excess_power = excess_power - POWER_DELTA
     
@@ -55,6 +57,19 @@ def calculate_and_set_max_current():
             check_for_power_increase(excess_power)
         elif excess_power <= 0 and shared_state.ev_max_current > PAUSE_CHARGING_CURRENT:
             check_for_power_decrease(excess_power)
+
+# returns battery excess power for calculating total excess power
+# if battery is charging and SoC >= HOME_BAT_MIN_SOC the charging power counts as excess power
+# negativ return values are missing power
+# positive return values are excess power
+def calculate_battery_power_for_excess():
+    # shared state battery power is negative for charging the battery
+    
+    if shared_state.battery_SoC < HOME_BAT_MIN_SOC and shared_state.battery_power < 0:
+        # battery charging and not yet fully charged
+        return 0
+    else: 
+        return -shared_state.battery_power
 
 
 # check if charging can be started
