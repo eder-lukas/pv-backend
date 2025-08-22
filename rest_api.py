@@ -5,7 +5,7 @@ import socket
 import struct
 import asyncio
 from contextlib import asynccontextmanager
-from solar_charging import regulate_ev_charging, charging_states
+from solar_charging import regulate_ev_charging, charging_states, MAX_CHARGING_CURRENT
 from modbus_interaction import (
     write_modbus_data,
     read_sma_modbus_data,
@@ -166,13 +166,14 @@ async def ev_charging_regulation():
             if shared_state.is_solar_only_charging:
                 regulate_ev_charging()
             else:
-                # Set charging current to maximum (16A) when not in solar-only mode
+                # Set charging current to maximum when not in solar-only mode
                 shared_state.ev_max_current = read_wallbox_modbus_data(
                     **ev_charging_modbus_registers["maximum_current"]
                 )
-                if shared_state.ev_max_current != 16:
+                if shared_state.ev_max_current != MAX_CHARGING_CURRENT:
+                    logger.info(f"Enabled instant charging. Setting charging current to {MAX_CHARGING_CURRENT}")
                     write_modbus_data(
-                        **ev_charging_modbus_registers["maximum_current"], value=16
+                        **ev_charging_modbus_registers["maximum_current"], value=MAX_CHARGING_CURRENT
                     )
 
             await asyncio.sleep(EV_CHARGING_REGULATION_DELAY)
