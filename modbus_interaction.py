@@ -1,4 +1,5 @@
 from pymodbus.client import ModbusTcpClient  # older versions pymodbus.client.sync
+import logging
 
 
 TRIPOWER_IP = "192.168.188.45"
