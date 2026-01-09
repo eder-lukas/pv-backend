@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Query
+from pydantic import BaseModel, Field
 import logging
 from starlette.middleware.cors import CORSMiddleware
 import socket
