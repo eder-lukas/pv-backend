@@ -17,7 +17,6 @@ PAUSE_CHARGING_CURRENT = 0  # Charging current setting for pausing the charging 
 MIN_CHARGING_START_POWER = (
     ONE_AMP_POWER * MIN_CHARGING_CURRENT
 )  # two phases, minimum charging current
-HOME_BAT_MIN_SOC = 95  # SoC of battery which must be reached before the charging power of the battery counts as excess power and could be used for charging
 
 
 charging_states = {
@@ -81,7 +80,7 @@ def calculate_and_set_max_current():
 def calculate_battery_power_for_excess():
     # shared state battery power is negative for charging the battery
 
-    if shared_state.battery_SoC < HOME_BAT_MIN_SOC and shared_state.battery_power < 0:
+    if shared_state.battery_SoC < shared_state.home_bat_min_soc and shared_state.battery_power < 0:
         # battery charging and not yet fully charged
         logger.debug(
             f"Home battery is charging and below min soc. SoC: {shared_state.battery_SoC} with {shared_state.battery_power} W",

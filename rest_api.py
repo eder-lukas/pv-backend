@@ -20,7 +20,7 @@ UDP_IP = "192.168.188.205"
 UDP_PORT = 9522
 
 EV_CHARGING_REGULATION_DELAY = (
-    15  # Delay between loop iterations for adjusting the ev charging current
+    10  # Delay between loop iterations for adjusting the ev charging current
 )
 
 
@@ -129,6 +129,24 @@ def set_solar_only_charging(
 
     return {"success": True, "solar_only_charging": shared_state.is_solar_only_charging}
 
+@app.get("/home-bat-min-soc")
+def get_home_bat_min_soc():
+    return shared_state.home_bat_min_soc
+
+class HomeBatMinSocRequest(BaseModel):
+    value: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Minimaler SOC der Hausbatterie (0–100)"
+    )
+
+@app.post("/home-bat-min-soc")
+def set_home_bat_min_soc(payload: HomeBatMinSocRequest):
+    shared_state.home_bat_min_soc = payload.value
+    return {
+        "home_bat_min_soc": shared_state.home_bat_min_soc
+    }
 
 # Background task for data collection (UDP and Modbus data)
 # Collects grid and emeter power information from udp messages and battery power and SoC information via modbus
