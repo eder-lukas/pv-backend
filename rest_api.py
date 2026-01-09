@@ -115,6 +115,8 @@ def get_power_data():
         + (data["grid_power"] or 0)
         + (data["battery_power"] or 0)
     )
+    
+    data["home_bat_min_soc"] = shared_state.home_bat_min_soc
 
     return data
 
@@ -128,10 +130,6 @@ def set_solar_only_charging(
     shared_state.is_solar_only_charging = enable
 
     return {"success": True, "solar_only_charging": shared_state.is_solar_only_charging}
-
-@app.get("/home-bat-min-soc")
-def get_home_bat_min_soc():
-    return shared_state.home_bat_min_soc
 
 class HomeBatMinSocRequest(BaseModel):
     value: int = Field(
