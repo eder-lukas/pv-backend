@@ -152,27 +152,38 @@ def set_home_bat_min_soc(payload: HomeBatMinSocRequest):
 async def data_collection():
     logger.info("✅ Data collection task started...")
 
-    # UDP socket for grid_power and emeter_power data collection
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind((UDP_IP, UDP_PORT))
-    sock.setblocking(False)  # Make socket non-blocking
-
-    logger.info(f"✅ UDP server running on Port {UDP_PORT}...")
-
     loop = asyncio.get_running_loop()
+    sock = None
 
     while True:
         try:
+            # (Re)create socket if needed
+            if sock is None:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sock.setblocking(False)
+                    sock.bind((UDP_IP, UDP_PORT))
+                    logger.info(f"✅ UDP server running on {UDP_IP}:{UDP_PORT}")
+                except OSError as e:
+                    logger.error(f"⚠️ UDP bind failed ({e}), retrying in 10s")
+                    if sock:
+                        sock.close()
+                        sock = None
+                    await asyncio.sleep(10)
+                    continue  # retry later
+            
             await get_grid_and_emeter_power(loop, sock)
             get_battery_power_and_soc()
             get_ev_charging_data()
 
         except asyncio.CancelledError:
             logger.warn("🛑 Data collection task cancelled")
-            sock.close()
+            if sock:
+                sock.close()
             raise
         except Exception as e:
             logger.error(f"⚠️ Error in data collection task: {e}")
+            await asyncio.sleep(1)
 
 
 # Background task for EV charging regulation
@@ -206,18 +217,27 @@ async def ev_charging_regulation():
 async def get_grid_and_emeter_power(loop, sock):
     try:
         data, addr = await asyncio.wait_for(loop.sock_recvfrom(sock, 1024), timeout=1)
-        if data[:3] == b"SMA":  # Check if the packet is from SMA
-            ip, _ = addr
+    except asyncio.TimeoutError:
+        return # no data in this cycle
+    except OSError as e:
+        logger.warning(f"⚠️ UDP socket error: {e}")
+        return
+    
+    try:
+        if data[:3] != b"SMA": # Check if the packet is from SMA
+            return
+        
+        ip, _ = addr
 
-            if ip == "192.168.188.54":  # Grid meter
-                feed_in = struct.unpack(">I", data[52:56])[0]
-                if feed_in == 0:
-                    shared_state.grid_power = struct.unpack(">I", data[32:36])[0]
-                else:
-                    shared_state.grid_power = -1 * feed_in
+        if ip == "192.168.188.54":  # Grid meter
+            feed_in = struct.unpack(">I", data[52:56])[0]
+            if feed_in == 0:
+                shared_state.grid_power = struct.unpack(">I", data[32:36])[0]
+            else:
+                shared_state.grid_power = -1 * feed_in
 
-            elif ip == "192.168.188.87":  # Energy meter
-                shared_state.emeter_power = struct.unpack(">I", data[52:56])[0]
+        elif ip == "192.168.188.87":  # Energy meter
+            shared_state.emeter_power = struct.unpack(">I", data[52:56])[0]
 
     except Exception as e:
         logger.error(f"⚠️ Error in UDP server: {e}")
@@ -235,7 +255,7 @@ def get_battery_power_and_soc():
             shared_state.battery_SoC = new_battery_soc
 
     except Exception as e:
-        logger.error(f"⚠️ Error reading battery data: {e}")
+        logger.warning(f"⚠️ Battery Modbus read failed: {e}")
 
 
 def get_ev_charging_data():
@@ -254,7 +274,7 @@ def get_ev_charging_data():
             shared_state.ev_max_current = new_max_current
 
     except Exception as e:
-        logger.error(f"⚠️ Error reading EV charging data: {e}")
+        logger.warning(f"⚠️ EVSE Modbus read failed: {e}")
 
 
 # Running:
