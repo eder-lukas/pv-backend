@@ -33,28 +33,28 @@ logger = logging.getLogger(__name__)
 
 
 # regulates the ev charging max current, so that no power is drained from the battery and there is always the POWER_DELTA available (e.g. for home battery charging or grid feed in)
-def regulate_ev_charging():
+def regulate_ev_charging(wb_state, config):
     # Read current values from Modbus
     current_charging_state = read_wallbox_modbus_data(
-        **ev_charging_modbus_registers["charging_state"]
+        **config["charging_state"]
     )
     current_max_current = read_wallbox_modbus_data(
-        **ev_charging_modbus_registers["maximum_current"]
+        **config["maximum_current"]
     )
     if current_charging_state is not None:
-        shared_state.ev_charging_state = current_charging_state
+        wb_state["charging_state"] = current_charging_state
     if current_max_current is not None:
-        shared_state.ev_max_current = current_max_current
+        wb_state["maximum_current"] = current_max_current
 
-    if shared_state.ev_charging_state >= 2 and shared_state.ev_charging_state <= 4:
-        calculate_and_set_max_current()
+    if wb_state["charging_state"] >= 2 and wb_state["charging_state"] <= 4:
+        calculate_and_set_max_current(config)
 
 
 # calculates the maximum current for ev charging and sets a new value if needed
 # two phases charging (VW e-Golf)
 # battery should not be drained for ev charging
 # minimum current 6A - pause current 0A
-def calculate_and_set_max_current():
+def calculate_and_set_max_current(config):
     # calculate if power is drained from the grid and/or battery
     # grid power in 10W -> //10 (negative is feed in)
     excess_power = shared_state.grid_power // -10 + calculate_battery_power_for_excess()
@@ -65,12 +65,12 @@ def calculate_and_set_max_current():
     logger.debug(f"Excess power with delta: {excess_power}")
 
     if shared_state.ev_max_current == PAUSE_CHARGING_CURRENT:
-        check_for_charging_start(excess_power)
+        check_for_charging_start(config, excess_power)
     else:
         if excess_power > 0 and shared_state.ev_max_current < MAX_CHARGING_CURRENT:
-            check_for_power_increase(excess_power)
+            check_for_power_increase(config, excess_power)
         elif excess_power <= 0 and shared_state.ev_max_current > PAUSE_CHARGING_CURRENT:
-            check_for_power_decrease(excess_power)
+            check_for_power_decrease(config, excess_power)
 
 
 # returns battery excess power for calculating total excess power
@@ -93,14 +93,14 @@ def calculate_battery_power_for_excess():
 
 # check if charging can be started
 # only run, if ev_max_current is 0 before method execution
-def check_for_charging_start(excess_power: int):
+def check_for_charging_start(config, excess_power: int):
     if excess_power >= MIN_CHARGING_START_POWER:
         logger.debug(f"start charging with min current: {MIN_CHARGING_CURRENT}")
-        set_charging_current(MIN_CHARGING_CURRENT)
+        set_charging_current(config, MIN_CHARGING_CURRENT)
 
 
 # check if more current is possible
-def check_for_power_increase(excess_power: int):
+def check_for_power_increase(config, excess_power: int):
     current_increase = math.floor(excess_power / ONE_AMP_POWER)  # floor always
 
     new_current = shared_state.ev_max_current + current_increase
@@ -108,11 +108,11 @@ def check_for_power_increase(excess_power: int):
     if new_current > MAX_CHARGING_CURRENT:
         new_current = MAX_CHARGING_CURRENT
 
-    set_charging_current(new_current)
+    set_charging_current(config, new_current)
 
 
 # check if less current or charging pause is necessary
-def check_for_power_decrease(excess_power: int):
+def check_for_power_decrease(config, excess_power: int):
     current_reduction = math.ceil(
         (excess_power * (-1)) / ONE_AMP_POWER
     )  # round up always
@@ -122,16 +122,16 @@ def check_for_power_decrease(excess_power: int):
     if new_current < MIN_CHARGING_CURRENT:
         new_current = PAUSE_CHARGING_CURRENT
 
-    set_charging_current(new_current)
+    set_charging_current(config, new_current)
 
 
 # only sets the new current, if it changed
-def set_charging_current(new_current):
+def set_charging_current(config, new_current):
     if new_current != shared_state.ev_max_current:
         logger.info(
             f"Setting Charging Current to new Value: {new_current} A. Old Value: {shared_state.ev_max_current} A"
         )
 
         write_modbus_data(
-            **ev_charging_modbus_registers["maximum_current"], value=new_current
+            **config["maximum_current"], value=new_current
         )

@@ -13,6 +13,7 @@ from modbus_interaction import (
     read_wallbox_modbus_data,
     sma_devices,
     ev_charging_modbus_registers,
+    WALLBOXES
 )
 import shared_state
 
@@ -103,11 +104,15 @@ def get_power_data():
     data["grid_power"] = round(shared_state.grid_power / 10)
     data["emeter_power"] = round(shared_state.emeter_power / 10)
 
-    data["charging_state"] = charging_states.get(
-        shared_state.ev_charging_state, "Unknown"
-    )
-    data["maximum_current"] = shared_state.ev_max_current
-    data["solar_only_charging"] = shared_state.is_solar_only_charging
+    data["wallboxes"] = [
+        {
+            "id": wb["id"],
+            "charging_state": charging_states.get(wb["charging_state"], "Unknown"),
+            "maximum_current": wb["maximum_current"],
+            "solar_only_charging": wb["solar_only_charging"],
+        }
+        for wb in shared_state.wallboxes
+    ]
 
     # Calculate house power
     data["consumption"] = (
@@ -124,11 +129,19 @@ def get_power_data():
 
 @app.post("/solar-only-charging")
 def set_solar_only_charging(
+    wallbox: int = Query(
+        ..., description="ID of the wallbox which should be set to solar only charging or immediate charging"
+    ),
     enable: bool = Query(
         ..., description="True = Nur Solarstrom laden, False = normaler Betrieb"
     )
 ):
-    shared_state.is_solar_only_charging = enable
+    wb = next((w for w in shared_state.wallboxes if w["id"] == wallbox), None)
+
+    if not wb:
+        return {"success": False, "error": "Wallbox not found"}
+    
+    wb["solar_only_charging"] = enable
 
     return {"success": True, "solar_only_charging": shared_state.is_solar_only_charging}
 
@@ -191,20 +204,23 @@ async def ev_charging_regulation():
     logger.info("✅ EV charging regulation task started...")
     while True:
         try:
-            if shared_state.is_solar_only_charging:
-                regulate_ev_charging()
-            else:
-                # Set charging current to maximum when not in solar-only mode
-                shared_state.ev_max_current = read_wallbox_modbus_data(
-                    **ev_charging_modbus_registers["maximum_current"]
-                )
-                if shared_state.ev_max_current != MAX_CHARGING_CURRENT:
-                    logger.info(f"Enabled instant charging. Setting charging current to {MAX_CHARGING_CURRENT}")
-                    write_modbus_data(
-                        **ev_charging_modbus_registers["maximum_current"], value=MAX_CHARGING_CURRENT
-                    )
+            for wb_state in shared_state.wallboxes:
+                config = next(w for w in WALLBOXES if w["id"] == wb_state["id"])
 
-            await asyncio.sleep(EV_CHARGING_REGULATION_DELAY)
+                if wb_state["solar_only_charging"]:
+                    regulate_ev_charging(wb_state, config)
+                else:
+                    current = read_wallbox_modbus_data(**config["maximum_current"])
+                    # Set charging current to maximum when not in solar-only mode
+
+                    if current != MAX_CHARGING_CURRENT:
+                        logger.info(f"Enabled instant charging. Setting charging current to {MAX_CHARGING_CURRENT}")
+                        wb_state["current"] = MAX_CHARGING_CURRENT
+                        write_modbus_data(
+                            **config["maximum_current"], value=MAX_CHARGING_CURRENT
+                        )
+
+                await asyncio.sleep(EV_CHARGING_REGULATION_DELAY)
 
         except asyncio.CancelledError:
             logger.warning("🛑 EV charging regulation task cancelled")
@@ -260,18 +276,19 @@ def get_battery_power_and_soc():
 
 def get_ev_charging_data():
     try:
-        new_charging_state = read_wallbox_modbus_data(
-            **ev_charging_modbus_registers["charging_state"]
-        )
-        new_max_current = read_wallbox_modbus_data(
-            **ev_charging_modbus_registers["maximum_current"]
-        )
+        from modbus_interaction import WALLBOXES
 
-        if new_charging_state is not None:
-            shared_state.ev_charging_state = new_charging_state
+        for wb in shared_state.wallboxes:
+            config = next(w for w in WALLBOXES if w["id"] == wb["id"])
 
-        if new_max_current is not None:
-            shared_state.ev_max_current = new_max_current
+            state = read_wallbox_modbus_data(**config["charging_state"])
+            current = read_wallbox_modbus_data(**config["maximum_current"])
+
+            if state is not None:
+                wb["charging_state"] = state
+
+            if current is not None: 
+                wb["maximum_current"] = current
 
     except Exception as e:
         logger.warning(f"⚠️ EVSE Modbus read failed: {e}")
