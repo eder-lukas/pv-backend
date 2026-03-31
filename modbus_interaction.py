@@ -4,42 +4,7 @@ import logging
 
 TRIPOWER_IP = "192.168.188.45"
 SUNNY_ISLAND_IP = "192.168.188.117"
-CHARGER_ME_IP = "192.168.188.94"
-KEBA_WALLBOX_IP = "192.168.188.x"
 MODBUS_PORT = 502
-
-WALLBOXES = [
-    {
-        "id": 1,
-        "name": "Halle (Lukas)",
-
-        "charging_state": {
-            "ip": CHARGER_ME_IP,
-            "register": 122,
-            "slave": 1,
-        },
-        "maximum_current": {
-            "ip": CHARGER_ME_IP,
-            "register": 1000,
-            "slave": 1,
-        },
-    },
-    {
-        "id": 2,
-        "name": "Garage (Papa)",
-
-        "charging_state": {
-            "ip": KEBA_WALLBOX_IP,
-            "register": 122,
-            "slave": 1,
-        },
-        "maximum_current": {
-            "ip": KEBA_WALLBOX_IP,
-            "register": 1000,
-            "slave": 1,
-        },
-    },
-]
 
 logger = logging.getLogger(__name__)
 
@@ -94,8 +59,6 @@ sma_devices = {
         "nan_value": 0xFFFFFFFF,
     },
 }
-
-
 
 def write_modbus_data(ip: str, register: int, slave: int, value: int):
     try:

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, HTTPException
 from pydantic import BaseModel, Field
 import logging
 from starlette.middleware.cors import CORSMiddleware
@@ -13,9 +13,10 @@ from modbus_interaction import (
     read_wallbox_modbus_data,
     sma_devices,
     ev_charging_modbus_registers,
-    WALLBOXES
 )
 import shared_state
+from wallbox_config import WALLBOX_CONFIGS
+from wallbox_service import get_wallbox_config
 
 # Change this address to the local interface address
 UDP_IP = "192.168.188.205"
@@ -106,12 +107,12 @@ def get_power_data():
 
     data["wallboxes"] = [
         {
-            "id": wb["id"],
+            "id": wb_id,
             "charging_state": charging_states.get(wb["charging_state"], "Unknown"),
             "maximum_current": wb["maximum_current"],
             "solar_only_charging": wb["solar_only_charging"],
         }
-        for wb in shared_state.wallboxes
+        for wb_id, wb in shared_state.wallbox_states.items()
     ]
 
     # Calculate house power
@@ -121,7 +122,7 @@ def get_power_data():
         + (data["grid_power"] or 0)
         + (data["battery_power"] or 0)
     )
-    
+
     data["home_bat_min_soc"] = shared_state.home_bat_min_soc
 
     return data
@@ -130,35 +131,86 @@ def get_power_data():
 @app.post("/solar-only-charging")
 def set_solar_only_charging(
     wallbox: int = Query(
-        ..., description="ID of the wallbox which should be set to solar only charging or immediate charging"
+        ...,
+        description="ID of the wallbox which should be set to solar only charging or immediate charging",
     ),
     enable: bool = Query(
         ..., description="True = Nur Solarstrom laden, False = normaler Betrieb"
-    )
+    ),
 ):
-    wb = next((w for w in shared_state.wallboxes if w["id"] == wallbox), None)
+    wb = shared_state.wallbox_states.get(wallbox)
 
     if not wb:
         return {"success": False, "error": "Wallbox not found"}
-    
+
     wb["solar_only_charging"] = enable
 
-    return {"success": True, "solar_only_charging": shared_state.is_solar_only_charging}
+    return {"success": True, "solar_only_charging": enable}
+
 
 class HomeBatMinSocRequest(BaseModel):
     value: int = Field(
-        ...,
-        ge=0,
-        le=100,
-        description="Minimaler SOC der Hausbatterie (0–100)"
+        ..., ge=0, le=100, description="Minimaler SOC der Hausbatterie (0–100)"
     )
 
 @app.post("/home-bat-min-soc")
 def set_home_bat_min_soc(payload: HomeBatMinSocRequest):
     shared_state.home_bat_min_soc = payload.value
-    return {
-        "home_bat_min_soc": shared_state.home_bat_min_soc
-    }
+    return {"home_bat_min_soc": shared_state.home_bat_min_soc}
+
+
+@app.post("/wallbox/{wallbox_id}/number_of_phases_used")
+def set_number_of_phases_used(
+    wallbox_id: int, number_of_phases_used: int = Query(..., description="1, 2 oder 3 Phasen")
+):
+    if number_of_phases_used not in (1, 2, 3):
+        raise HTTPException(
+            status_code=400, detail="number_of_phases_used must be 1, 2, or 3"
+        )
+
+    wb = shared_state.wallbox_states.get(wallbox_id)
+    if not wb:
+        raise HTTPException(status_code=404, detail="Wallbox not found")
+
+    wb["number_of_phases_used"] = number_of_phases_used
+    return {"wallbox_id": wallbox_id, "number_of_phases_used": number_of_phases_used}
+
+
+@app.post("/wallbox/{wallbox_id}/increase_priority")
+def increase_priority(wallbox_id: int):
+    wb = shared_state.wallbox_states.get(wallbox_id)
+    if not wb:
+        raise HTTPException(status_code=404, detail="Wallbox not found")
+
+    # Priorität um 1 erhöhen (kleiner Wert = höhere Priorität)
+    if wb["priority"] > 1:
+        wb["priority"] -= 1
+
+        # Alle anderen Wallboxen ggf. nachjustieren
+        for other_id, other_wb in shared_state.wallbox_states.items():
+            if other_id != wallbox_id and other_wb["priority"] == wb["priority"]:
+                other_wb["priority"] += 1
+
+    return {"wallbox_id": wallbox_id, "priority": wb["priority"]}
+
+
+@app.post("/wallbox/{wallbox_id}/decrease_priority")
+def decrease_priority(wallbox_id: int):
+    wb = shared_state.wallbox_states.get(wallbox_id)
+    if not wb:
+        raise HTTPException(status_code=404, detail="Wallbox not found")
+
+    max_priority = len(shared_state.wallbox_states)
+    if wb["priority"] < max_priority:
+        wb["priority"] += 1
+
+        # Alle anderen Wallboxen ggf. nachjustieren
+        for other_id, other_wb in shared_state.wallbox_states.items():
+            if other_id != wallbox_id and other_wb["priority"] == wb["priority"]:
+                other_wb["priority"] -= 1
+
+    return {"wallbox_id": wallbox_id, "priority": wb["priority"]}
+
 
 # Background task for data collection (UDP and Modbus data)
 # Collects grid and emeter power information from udp messages and battery power and SoC information via modbus
@@ -184,7 +236,7 @@ async def data_collection():
                         sock = None
                     await asyncio.sleep(10)
                     continue  # retry later
-            
+
             await get_grid_and_emeter_power(loop, sock)
             get_battery_power_and_soc()
             get_ev_charging_data()
@@ -204,18 +256,26 @@ async def ev_charging_regulation():
     logger.info("✅ EV charging regulation task started...")
     while True:
         try:
-            for wb_state in shared_state.wallboxes:
-                config = next(w for w in WALLBOXES if w["id"] == wb_state["id"])
+            # Order Wallboxes by Priority
+            sorted_wallboxes = sorted(
+                shared_state.wallbox_states.items(),
+                key=lambda item: item[1]["priority"],
+            )
+
+            for wb_id, wb_state in sorted_wallboxes:
+                config = get_wallbox_config(wb_id)
 
                 if wb_state["solar_only_charging"]:
-                    regulate_ev_charging(wb_state, config)
+                    regulate_ev_charging(config, wb_state)
                 else:
                     current = read_wallbox_modbus_data(**config["maximum_current"])
                     # Set charging current to maximum when not in solar-only mode
 
                     if current != MAX_CHARGING_CURRENT:
-                        logger.info(f"Enabled instant charging. Setting charging current to {MAX_CHARGING_CURRENT}")
-                        wb_state["current"] = MAX_CHARGING_CURRENT
+                        logger.info(
+                            f"Enabled instant charging. Setting charging current to {MAX_CHARGING_CURRENT}"
+                        )
+                        wb_state["maximum_current"] = MAX_CHARGING_CURRENT
                         write_modbus_data(
                             **config["maximum_current"], value=MAX_CHARGING_CURRENT
                         )
@@ -234,15 +294,15 @@ async def get_grid_and_emeter_power(loop, sock):
     try:
         data, addr = await asyncio.wait_for(loop.sock_recvfrom(sock, 1024), timeout=1)
     except asyncio.TimeoutError:
-        return # no data in this cycle
+        return  # no data in this cycle
     except OSError as e:
         logger.warning(f"⚠️ UDP socket error: {e}")
         return
-    
+
     try:
-        if data[:3] != b"SMA": # Check if the packet is from SMA
+        if data[:3] != b"SMA":  # Check if the packet is from SMA
             return
-        
+
         ip, _ = addr
 
         if ip == "192.168.188.54":  # Grid meter
@@ -276,19 +336,17 @@ def get_battery_power_and_soc():
 
 def get_ev_charging_data():
     try:
-        from modbus_interaction import WALLBOXES
-
-        for wb in shared_state.wallboxes:
-            config = next(w for w in WALLBOXES if w["id"] == wb["id"])
+        for wb_id, wb_state in shared_state.wallbox_states.items():
+            config = get_wallbox_config(wb_id)
 
             state = read_wallbox_modbus_data(**config["charging_state"])
             current = read_wallbox_modbus_data(**config["maximum_current"])
 
             if state is not None:
-                wb["charging_state"] = state
+                wb_state["charging_state"] = state
 
-            if current is not None: 
-                wb["maximum_current"] = current
+            if current is not None:
+                wb_state["maximum_current"] = current
 
     except Exception as e:
         logger.warning(f"⚠️ EVSE Modbus read failed: {e}")
