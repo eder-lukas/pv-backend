@@ -12,11 +12,10 @@ from modbus_interaction import (
     read_sma_modbus_data,
     read_wallbox_modbus_data,
     sma_devices,
-    ev_charging_modbus_registers,
 )
 import shared_state
 from wallbox_config import WALLBOX_CONFIGS
-from wallbox_service import get_wallbox_config
+from wallbox_service import get_wallbox_config, get_wallbox_name
 
 # Change this address to the local interface address
 UDP_IP = "192.168.188.205"
@@ -108,9 +107,12 @@ def get_power_data():
     data["wallboxes"] = [
         {
             "id": wb_id,
+            "name": get_wallbox_name(wb_id),
             "charging_state": charging_states.get(wb["charging_state"], "Unknown"),
             "maximum_current": wb["maximum_current"],
             "solar_only_charging": wb["solar_only_charging"],
+            "number_of_phases_used": wb["number_of_phases_used"],
+            "priority": wb["priority"],
         }
         for wb_id, wb in shared_state.wallbox_states.items()
     ]
