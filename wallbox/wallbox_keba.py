@@ -118,11 +118,8 @@ class KebaP30X(WallboxBase):
             slave=self.slave,
             count=2,
         )
-        print("reading max current versions 1 and 2")
-        print((registers[0] << 16) | registers[1])
-        print((registers[1] << 16) | registers[0])
+
         value = self._combine_registers(registers)
-        print("reading max current end")
         if value is None:
             logger.error(f"Error reading max current for Keba wallbox")
             return 0

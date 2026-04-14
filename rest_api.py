@@ -133,6 +133,11 @@ def set_solar_only_charging(
     if not wb:
         raise HTTPException(status_code=404, detail="Wallbox not found")
     wb["solar_only_charging"] = enable
+    
+    if not enable:
+        # set current to max current
+        set_max_current(wallbox, MAX_CHARGING_CURRENT)
+    
     return {"success": True, "solar_only_charging": enable}
 
 
@@ -273,30 +278,6 @@ async def ev_charging_regulation():
         try:
             # ── Solar-only wallboxes ───────────────────────────────────
             await regulate_all_wallboxes_solar(WALLBOXES, shared_state.wallbox_states)
-
-            # ── Instant-charging wallboxes ─────────────────────────────
-            for wb_id, wb_state in shared_state.wallbox_states.items():
-                if wb_state.get("solar_only_charging", False):
-                    continue   # handled above
-
-                wallbox: WallboxBase = WALLBOXES.get(wb_id)
-                if wallbox is None:
-                    continue
-
-                current = wallbox.read_max_current()
-                target_current = wb_state.get("maximum_current", MAX_CHARGING_CURRENT)
-                
-                if abs(current - target_current) > 500:
-                    logger.info(
-                        f"[{wallbox.name}] Instant charging: "
-                        f"setting current to {target_current} mA"
-                    )
-                    # Resume first if paused
-                    if wb_state.get("paused", False):
-                        wallbox.resume_charging()
-                        wb_state["paused"] = False
-                    wallbox.write_max_current(target_current)
-                    wb_state["maximum_current"] = target_current
 
             await asyncio.sleep(EV_CHARGING_REGULATION_DELAY)
 
