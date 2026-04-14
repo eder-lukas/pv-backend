@@ -22,8 +22,8 @@ Pause/resume:
 """
 
 import logging
-from modbus_interaction import read_wallbox_modbus_data, write_modbus_data
-from wallbox_base import WallboxBase
+from modbus_interaction import write_modbus_data, read_modbus_data
+from wallbox.wallbox_base import WallboxBase
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ FULLY_CHARGED_POWER_THRESHOLD_W = 50
 
 # Register addresses
 REG_CHARGING_STATE = 1000
-REG_ACTIVE_POWER   = 1020   # read: W
+REG_ACTIVE_POWER   = 1020   # read: mW
 REG_MAX_CURRENT    = 1100   # read: mA
 REG_SET_CURRENT    = 5004   # write: mA
 REG_ENABLE         = 5014   # write: 1=enable, 0=disable/pause
@@ -66,13 +66,24 @@ class KebaP30X(WallboxBase):
         name: str,
         number_of_phases: int,
         ip: str,
+        modbus_port: int,
         slave: int = MODBUS_SLAVE,
     ):
         super().__init__(wallbox_id, name, number_of_phases)
         self.ip = ip
+        self.modbus_port = modbus_port
         self.slave = slave
         self._enabled = True  # track enable state to avoid redundant writes
 
+    @staticmethod
+    def _combine_registers(registers: list[int]) -> int:
+        if len(registers) != 2:
+            logger.error(f"Error reading charging state for Keba wallbox")
+            return None
+        
+        return (registers[0] << 16) | registers[1]
+    
+        
     # ------------------------------------------------------------------
     # Abstract implementations
     # ------------------------------------------------------------------
@@ -82,13 +93,21 @@ class KebaP30X(WallboxBase):
         Register 1000 returns KEBA-specific codes.
         Map to unified IEC 61851 codes via KEBA_STATE_MAP.
         """
-        raw = read_wallbox_modbus_data(
+        registers = read_modbus_data(
             ip=self.ip,
+            modbus_port=self.modbus_port,
             register=REG_CHARGING_STATE,
             slave=self.slave,
+            count=2,
         )
-        unified = KEBA_STATE_MAP.get(raw, 0)
-        logger.debug(f"[{self.name}] Charging state raw={raw} → unified={unified}")
+        
+        charging_state = self._combine_registers(registers)
+        if charging_state is None:
+            logger.error(f"Error reading charging state for Keba wallbox")
+            return 4
+        
+        unified = KEBA_STATE_MAP.get(charging_state, 0)
+        logger.debug(f"[{self.name}] Charging state raw={charging_state} → unified={unified}")
         return unified
 
     def read_max_current(self) -> float:
@@ -96,12 +115,21 @@ class KebaP30X(WallboxBase):
         Register 1100 returns current in mA.
         Convert to Ampere (float, one decimal place).
         """
-        raw_ma = read_wallbox_modbus_data(
+        registers = read_modbus_data(
             ip=self.ip,
+            modbus_port=self.modbus_port,
             register=REG_MAX_CURRENT,
             slave=self.slave,
+            count=2,
         )
-        return raw_ma if raw_ma is not None else 0
+
+        value = self._combine_registers(registers)
+        if value is None:
+            logger.error(f"Error reading max current for Keba wallbox")
+            return 0
+        
+        return value
+    
 
     def write_max_current(self, milliampere) -> None:
         """
@@ -118,6 +146,7 @@ class KebaP30X(WallboxBase):
         logger.debug(f"[{self.name}] Writing max current: {milliampere} mA")
         write_modbus_data(
             ip=self.ip,
+            modbus_port=self.modbus_port,
             register=REG_SET_CURRENT,
             slave=self.slave,
             value=milliampere,
@@ -129,6 +158,7 @@ class KebaP30X(WallboxBase):
             logger.info(f"[{self.name}] Pausing charging (disable register 5014=0)")
             write_modbus_data(
                 ip=self.ip,
+                modbus_port=self.modbus_port,
                 register=REG_ENABLE,
                 slave=self.slave,
                 value=0,
@@ -141,6 +171,7 @@ class KebaP30X(WallboxBase):
             logger.info(f"[{self.name}] Resuming charging (enable register 5014=1)")
             write_modbus_data(
                 ip=self.ip,
+                modbus_port=self.modbus_port,
                 register=REG_ENABLE,
                 slave=self.slave,
                 value=1,
@@ -152,12 +183,21 @@ class KebaP30X(WallboxBase):
     # ------------------------------------------------------------------
 
     def _read_active_power(self) -> int:
-        """Return active power in W from register 1020."""
-        return read_wallbox_modbus_data(
+        """Return active power in mW from register 1020."""
+        registers = read_modbus_data(
             ip=self.ip,
+            modbus_port=self.modbus_port,
             register=REG_ACTIVE_POWER,
             slave=self.slave,
-        ) or 0
+            count=2,
+        )
+        value = self._combine_registers(registers=registers)
+        if value is None:
+            logger.error(f"Error reading active power for Keba wallbox")
+            return 0
+        
+        return value
+    
 
     def is_car_fully_charged(self) -> bool:
         """

@@ -10,15 +10,15 @@ Pause:          write 0 A to register 1000  (device supports 0 A)
 
 import logging
 import math
-from modbus_interaction import read_wallbox_modbus_data, write_modbus_data
-from wallbox_base import WallboxBase
+from modbus_interaction import read_modbus_data, write_modbus_data
+from wallbox.wallbox_base import WallboxBase
 
 logger = logging.getLogger(__name__)
 
 PAUSE_CURRENT = 0  # Juice supports setting current to 0 A to pause
-CHARGING_STATE_REGISTER=122,
-MAX_CURRENT_REGISTER=1000,
-MODBUS_SLAVE=1,
+CHARGING_STATE_REGISTER=122
+MAX_CURRENT_REGISTER=1000
+MODBUS_SLAVE=1
 
 class JuiceChargerMe(WallboxBase):
     """Juice Charger Me – integer-Ampere resolution, pause via 0 A."""
@@ -29,10 +29,12 @@ class JuiceChargerMe(WallboxBase):
         name: str,
         number_of_phases: int,
         ip: str,
+        modbus_port: int,
         slave: int = MODBUS_SLAVE,
     ):
         super().__init__(wallbox_id, name, number_of_phases)
         self.ip = ip
+        self.modbus_port = modbus_port
         self.slave = slave
 
     # ------------------------------------------------------------------
@@ -44,20 +46,32 @@ class JuiceChargerMe(WallboxBase):
         Register 122 directly returns IEC 61851 state codes 1–6 (or 0 on error).
         These map 1:1 to the unified state codes.
         """
-        value = read_wallbox_modbus_data(
-            ip=self.ip,
-            register=CHARGING_STATE_REGISTER,
-            slave=self.slave,
-        )
-        return value if value is not None else 0
+        try:
+            value = read_modbus_data(
+                ip=self.ip,
+                modbus_port=self.modbus_port,
+                register=CHARGING_STATE_REGISTER,
+                slave=self.slave,
+                count=1,
+            )[0]
+            return value if value is not None else 0
+        except Exception as e:
+            logger.error(f"Error reading charging state {self.ip}:{self.register} - {e}")
+            return 0  # Return 0 in case of an exception
 
     def read_max_current(self) -> int:
-        value = read_wallbox_modbus_data(
-            ip=self.ip,
-            register=MAX_CURRENT_REGISTER,
-            slave=self.slave,
-        )
-        return value * 1000 if value is not None else 0
+        try:
+            value = read_modbus_data(
+                ip=self.ip,
+                modbus_port=self.modbus_port,
+                register=MAX_CURRENT_REGISTER,
+                slave=self.slave,
+                count=1,
+            )[0]
+            return value * 1000 if value is not None else 0
+        except Exception as e:
+            logger.error(f"Error max current {self.ip}:{self.register} - {e}")
+            return 0  # Return 0 in case of an exception
 
     def write_max_current(self, milliampere:int) -> None:
         """Write integer Ampere. Juice only supports whole Ampere steps. Therefore in this Method milliampere are floored to ampere"""
@@ -71,6 +85,7 @@ class JuiceChargerMe(WallboxBase):
 
         write_modbus_data(
             ip=self.ip,
+            modbus_port=self.modbus_port,
             register=MAX_CURRENT_REGISTER,
             slave=self.slave,
             value=ampere_int,

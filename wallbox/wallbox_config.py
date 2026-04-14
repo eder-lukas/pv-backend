@@ -7,8 +7,8 @@ WALLBOXES directly and never need to know the concrete class.
 """
 
 from wallbox.wallbox_base import WallboxBase
-from wallbox_juice import JuiceChargerMe
-from wallbox_keba import KebaP30X
+from wallbox.wallbox_juice import JuiceChargerMe
+from wallbox.wallbox_keba import KebaP30X
 
 # ── Network addresses ──────────────────────────────────────────────────────────
 CHARGER_ME_IP   = "192.168.188.94"
@@ -27,11 +27,13 @@ WALLBOXES: dict[int, "WallboxBase"] = {
         name="Halle (Lukas)",
         number_of_phases=2,          # default; overrideable via API
         ip=CHARGER_ME_IP,
+        modbus_port=502,
     ),
     2: KebaP30X(
         wallbox_id=2,
         name="Garage (Papa)",
         number_of_phases=3,          # default; overrideable via API
         ip=KEBA_WALLBOX_IP,
+        modbus_port=1502,
     ),
 }

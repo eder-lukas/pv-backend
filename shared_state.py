@@ -32,7 +32,7 @@ wallbox_states: dict[int, dict] = {
         "priority": 2,
         "charging_state": 0,
         "maximum_current": 0,
-        "solar_only_charging": False,
+        "solar_only_charging": True,
         "paused": False,
     },
     2: {
@@ -40,7 +40,7 @@ wallbox_states: dict[int, dict] = {
         "priority": 1,
         "charging_state": 0,
         "maximum_current": 0,
-        "solar_only_charging": False,
+        "solar_only_charging": True,
         "paused": False,
     },
 }

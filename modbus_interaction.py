@@ -4,7 +4,6 @@ import logging
 
 TRIPOWER_IP = "192.168.188.45"
 SUNNY_ISLAND_IP = "192.168.188.117"
-MODBUS_PORT = 502
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +17,7 @@ def combine_registers(high, low):
 sma_devices = {
     "tripower_total_power": {
         "ip": TRIPOWER_IP,
+        "modbus_port": 502,
         "register": 30775,
         "slave": 3,
         "signed": False,
@@ -25,6 +25,7 @@ sma_devices = {
     },
     "tripower_str1_power": {
         "ip": TRIPOWER_IP,
+        "modbus_port": 502,
         "register": 30773,
         "slave": 3,
         "signed": False,
@@ -32,6 +33,7 @@ sma_devices = {
     },
     "tripower_str2_power": {
         "ip": TRIPOWER_IP,
+        "modbus_port": 502,
         "register": 30961,
         "slave": 3,
         "signed": False,
@@ -39,6 +41,7 @@ sma_devices = {
     },
     "tripower_str3_power": {
         "ip": TRIPOWER_IP,
+        "modbus_port": 502,
         "register": 30967,
         "slave": 3,
         "signed": False,
@@ -46,6 +49,7 @@ sma_devices = {
     },
     "battery_power": {
         "ip": SUNNY_ISLAND_IP,
+        "modbus_port": 502,
         "register": 30775,
         "slave": 3,
         "signed": True,
@@ -53,6 +57,7 @@ sma_devices = {
     },
     "battery_SoC": {
         "ip": SUNNY_ISLAND_IP,
+        "modbus_port": 502,
         "register": 30845,
         "slave": 3,
         "signed": False,
@@ -60,12 +65,13 @@ sma_devices = {
     },
 }
 
-def write_modbus_data(ip: str, register: int, slave: int, value: int):
+def write_modbus_data(ip: str, modbus_port: int, register: int, slave: int, value: int):
     try:
-        client = ModbusTcpClient(ip, port=MODBUS_PORT, timeout=10)
+        client = ModbusTcpClient(ip, port=modbus_port, timeout=10)
         connection = client.connect()
         if connection:
             response = client.write_register(register, value, slave=slave)
+            print(response)
         else:
             logger.error("Failed to connect to Modbus Server")
         client.close()
@@ -73,9 +79,9 @@ def write_modbus_data(ip: str, register: int, slave: int, value: int):
         logger.error(f"Error writing to {ip}:{register} - {e}")
 
 
-def read_modbus_data(ip: str, register: int, slave: int, count: int):
+def read_modbus_data(ip: str, modbus_port: int, register: int, slave: int, count: int):
     try:
-        client = ModbusTcpClient(ip, port=MODBUS_PORT, timeout=10)
+        client = ModbusTcpClient(ip, port=modbus_port, timeout=10)
         client.connect()
         response = client.read_holding_registers(
             register, count=count, slave=slave
@@ -84,33 +90,22 @@ def read_modbus_data(ip: str, register: int, slave: int, count: int):
         if response and response.registers:
             return response.registers
         else:
+            logger.error(f"Error reading {ip}:{register} - no response or no registers in response")
             return (
                 None  # Return 0 if the register is empty or there is no valid response
             )
     except Exception as e:
         logger.error(f"Error reading {ip}:{register} - {e}")
-        return None  # Return 0 in case of an exception
-
-
-def read_wallbox_modbus_data(ip: str, register: int, slave: int):
-    try:
-        value = read_modbus_data(ip, register, slave, 1)[0]
-        if value != None:
-            return value
-        else:
-            return 0
-    except Exception as e:
-        logger.error(f"Error reading {ip}:{register} - {e}")
-        return 0  # Return 0 in case of an exception
+        return e  # Return 0 in case of an exception
 
 
 # Modbus read function
 def read_sma_modbus_data(
-    ip: str, register: int, slave: int, signed: bool, nan_value: int
+    ip: str, modbus_port: int, register: int, slave: int, signed: bool, nan_value: int
 ):
     try:
-        registers = read_modbus_data(ip, register, slave, 2)
-        if registers:
+        registers = read_modbus_data(ip, modbus_port, register, slave, 2)
+        if registers and len(registers) == 2:
             value = combine_registers(registers[0], registers[1])
             if value == nan_value:
                 return 0

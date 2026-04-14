@@ -17,7 +17,7 @@ Key design decisions
 import asyncio
 import logging
 import math
-from wallbox_base import WallboxBase, CHARGING_STATES
+from wallbox.wallbox_base import WallboxBase, CHARGING_STATES
 import shared_state
 
 ONE_PHASE_VOLTAGE   = 230          # V
@@ -200,7 +200,7 @@ async def regulate_all_wallboxes_solar(wallboxes: dict, wb_states: dict):
       After each increase, wait INTER_WALLBOX_INCREASE_DELAY_S seconds so the
       grid meter can reflect the new load before we allocate power to the next.
     """
-    from wallbox_config import WALLBOXES
+    from wallbox.wallbox_config import WALLBOXES
 
     solar_wbs = [
         (wb_id, wb_states[wb_id])

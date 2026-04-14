@@ -20,7 +20,6 @@ from starlette.middleware.cors import CORSMiddleware
 import shared_state
 from modbus_interaction import (
     read_sma_modbus_data,
-    write_modbus_data,
     sma_devices,
 )
 from solar_charging import (
@@ -28,8 +27,8 @@ from solar_charging import (
     CHARGING_STATES,
     MAX_CHARGING_CURRENT,
 )
-from wallbox_config import WALLBOXES
-from wallbox_base import WallboxBase
+from wallbox.wallbox_config import WALLBOXES
+from wallbox.wallbox_base import WallboxBase
 
 # ── Network config ─────────────────────────────────────────────────────────────
 UDP_IP   = "192.168.188.205"
