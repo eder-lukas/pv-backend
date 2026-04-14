@@ -118,7 +118,7 @@ def _set_current(wallbox: WallboxBase, wb_state: dict, new_current: int) -> int:
     logger.info(
         f"[{wallbox.name}] Setting current: {current_val} A → {new_current} A"
     )
-    wallbox.set_current_precise(new_current)
+    wallbox.set_current(new_current)
     wb_state["maximum_current"] = new_current
     return _calculate_power_from_current(new_current - current_val, wb_state['number_of_phases_used'])
 

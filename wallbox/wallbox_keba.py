@@ -14,9 +14,6 @@ Register map (write):
   5004 – Set charging current (mA)
   5014 – Enable/Disable charging station (1 = enable, 0 = disable / pause)
 
-Precision:
-  KEBA supports milli-Ampere resolution → set_current_precise() sends mA values.
-
 Pause/resume:
   KEBA does NOT support 0 A. Pause via register 5014 = 0, resume via 5014 = 1.
 """
@@ -139,7 +136,7 @@ class KebaP30X(WallboxBase):
 
         # Check whether the value actually changed (within 0.05 A tolerance)
         old_current = self.read_max_current()
-        if abs(milliampere - old_current) < 0.05:
+        if abs(milliampere - old_current) < 100:
             logger.debug(f"[{self.name}] not setting current because of (nearly) no change. Old: {old_current} mA, New:{milliampere} mA")
             return
 
@@ -216,8 +213,3 @@ class KebaP30X(WallboxBase):
                 f"(active power={power} W < {FULLY_CHARGED_POWER_THRESHOLD_W} W)"
             )
         return fully_charged
-
-    # ------------------------------------------------------------------
-    # Current-setting: KEBA supports sub-Amp precision → use precise setter
-    # (base class set_current_precise already does round(ampere,1); that's fine)
-    # ------------------------------------------------------------------

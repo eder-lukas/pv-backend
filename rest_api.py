@@ -26,6 +26,7 @@ from solar_charging import (
     regulate_all_wallboxes_solar,
     CHARGING_STATES,
     MAX_CHARGING_CURRENT,
+    MIN_CHARGING_CURRENT
 )
 from wallbox.wallbox_config import WALLBOXES
 from wallbox.wallbox_base import WallboxBase
@@ -208,7 +209,8 @@ def set_max_current(wallbox_id: int, payload: SetMaxCurrentRequest):
         raise HTTPException(status_code=500, detail="Wallbox config missing")
 
     try:
-        # Apply immediately
+        if (payload.value < MIN_CHARGING_CURRENT):
+            wallbox.pause_charging()
         wallbox.write_max_current(payload.value)
 
         # Update shared state (important so background loop keeps it)
@@ -284,7 +286,7 @@ async def ev_charging_regulation():
                 current = wallbox.read_max_current()
                 target_current = wb_state.get("maximum_current", MAX_CHARGING_CURRENT)
                 
-                if current != target_current:
+                if abs(current - target_current) > 500:
                     logger.info(
                         f"[{wallbox.name}] Instant charging: "
                         f"setting current to {target_current} mA"

@@ -6,25 +6,25 @@ from wallbox.wallbox_juice import JuiceChargerMe
 from wallbox.wallbox_keba import KebaP30X
 
 
-juice = JuiceChargerMe(1, "Wallbox Halle (Lukas)", 3, "192.168.188.94", 502, 1)
+# juice = JuiceChargerMe(1, "Wallbox Halle (Lukas)", 3, "192.168.188.94", 502, 1)
 
-print(juice.read_charging_state())
-print(juice.read_max_current())
+# print(juice.read_charging_state())
+# print(juice.read_max_current())
 # juice.write_max_current(16000)
 # print(juice.read_max_current())
-juice.pause_charging()
+# juice.pause_charging()
 
-print(juice.read_charging_state())
-print(juice.read_max_current())
-juice.write_max_current(16000)
+# print(juice.read_charging_state())
+# print(juice.read_max_current())
+# juice.write_max_current(16000)
 
-print(juice.read_charging_state())
-print(juice.read_max_current())
+# print(juice.read_charging_state())
+# print(juice.read_max_current())
 
-# keba = KebaP30X(2, "Wallbox Garage (Papa)", 3, "192.168.188.132", 502, 1)
+keba = KebaP30X(2, "Wallbox Garage (Papa)", 3, "192.168.188.132", 502, 1)
 
-# print(keba.read_charging_state())
-# print(keba.read_max_current())
+print(keba.read_charging_state())
+print(keba.read_max_current())
 # keba.write_max_current(10000)
 # print(keba.read_max_current()) #10a
 # print(keba._read_active_power()) #4,6 kw oder so
