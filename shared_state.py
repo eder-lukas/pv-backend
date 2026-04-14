@@ -22,7 +22,7 @@ home_bat_min_soc = 80
 #   Can be updated via the REST API at runtime.
 # priority: 1 = highest. Lower number = served first when excess power is limited.
 # charging_state: latest unified IEC 61851 code (0–6), read from hardware.
-# maximum_current: last known / last set max current (A, float for KEBA).
+# maximum_current: last known / last set max current (mA int).
 # solar_only_charging: True = regulate to solar excess; False = charge at max.
 # paused: True when the wallbox was explicitly paused by the regulator.
 

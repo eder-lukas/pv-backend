@@ -71,7 +71,6 @@ def write_modbus_data(ip: str, modbus_port: int, register: int, slave: int, valu
         connection = client.connect()
         if connection:
             response = client.write_register(register, value, slave=slave)
-            print(response)
         else:
             logger.error("Failed to connect to Modbus Server")
         client.close()

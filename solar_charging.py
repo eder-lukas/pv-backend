@@ -6,7 +6,7 @@ Solar-excess EV-charging regulator.
 Key design decisions
 ────────────────────
 * Each wallbox is represented by a WallboxBase subclass that knows its own
-  hardware protocol (Juice → integer A, KEBA → float mA precision).
+  hardware protocol (Juice only supports A, KEBA supports mA precision).
 * Excess power is recalculated between wallboxes with a 10-second wait after
   any *increase* so the grid meter has time to reflect the new draw.
 * Decreases are applied immediately, lowest-priority wallbox first.

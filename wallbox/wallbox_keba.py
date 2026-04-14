@@ -107,10 +107,9 @@ class KebaP30X(WallboxBase):
         logger.debug(f"[{self.name}] Charging state raw={charging_state} → unified={unified}")
         return unified
 
-    def read_max_current(self) -> float:
+    def read_max_current(self) -> int:
         """
         Register 1100 returns current in mA.
-        Convert to Ampere (float, one decimal place).
         """
         registers = read_modbus_data(
             ip=self.ip,
@@ -119,8 +118,11 @@ class KebaP30X(WallboxBase):
             slave=self.slave,
             count=2,
         )
-
+        print("reading max current versions 1 and 2")
+        print((registers[0] << 16) | registers[1])
+        print((registers[1] << 16) | registers[0])
         value = self._combine_registers(registers)
+        print("reading max current end")
         if value is None:
             logger.error(f"Error reading max current for Keba wallbox")
             return 0
@@ -130,8 +132,7 @@ class KebaP30X(WallboxBase):
 
     def write_max_current(self, milliampere) -> None:
         """
-        Write charging current. Accepts int or float in Ampere.
-        Converts to mA for the hardware register.
+        Write charging current. Accepts int in mA.
         """
 
         # Check whether the value actually changed (within 0.05 A tolerance)
