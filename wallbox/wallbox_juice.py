@@ -79,7 +79,7 @@ class JuiceChargerMe(WallboxBase):
 
         # Check whether the value actually changed
         old_current = self.read_max_current()
-        if abs(ampere_int - old_current) < 0:
+        if abs(milliampere - old_current) < 0:
             logger.debug(f"[{self.name}] not setting current because of no change. Old: {old_current} mA, New:{milliampere} mA")
             return
 

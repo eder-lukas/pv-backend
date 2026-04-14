@@ -186,6 +186,43 @@ def decrease_priority(wallbox_id: int):
     return {"wallbox_id": wallbox_id, "priority": wb["priority"]}
 
 
+class SetMaxCurrentRequest(BaseModel):
+    value: int = Field(..., ge=6000, le=16000, description="Max charging current in A")
+
+
+@app.post("/wallbox/{wallbox_id}/max_current")
+def set_max_current(wallbox_id: int, payload: SetMaxCurrentRequest):
+    wb = shared_state.wallbox_states.get(wallbox_id)
+    if not wb:
+        raise HTTPException(status_code=404, detail="Wallbox not found")
+
+    # Only allow for instant charging
+    if wb.get("solar_only_charging", False):
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot set max current while solar-only charging is enabled"
+        )
+
+    wallbox: WallboxBase = WALLBOXES.get(wallbox_id)
+    if wallbox is None:
+        raise HTTPException(status_code=500, detail="Wallbox config missing")
+
+    try:
+        # Apply immediately
+        wallbox.write_max_current(payload.value)
+
+        # Update shared state (important so background loop keeps it)
+        wb["maximum_current"] = payload.value
+
+        return {
+            "wallbox_id": wallbox_id,
+            "maximum_current": payload.value,
+        }
+
+    except Exception as e:
+        logger.error(f"Error setting max current: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ── Background tasks ───────────────────────────────────────────────────────────
 
 async def data_collection():
@@ -245,17 +282,19 @@ async def ev_charging_regulation():
                     continue
 
                 current = wallbox.read_max_current()
-                if current != MAX_CHARGING_CURRENT:
+                target_current = wb_state.get("maximum_current", MAX_CHARGING_CURRENT)
+                
+                if current != target_current:
                     logger.info(
                         f"[{wallbox.name}] Instant charging: "
-                        f"setting current to {MAX_CHARGING_CURRENT} A"
+                        f"setting current to {target_current} mA"
                     )
                     # Resume first if paused
                     if wb_state.get("paused", False):
                         wallbox.resume_charging()
                         wb_state["paused"] = False
-                    wallbox.write_max_current(MAX_CHARGING_CURRENT)
-                    wb_state["maximum_current"] = MAX_CHARGING_CURRENT
+                    wallbox.write_max_current(target_current)
+                    wb_state["maximum_current"] = target_current
 
             await asyncio.sleep(EV_CHARGING_REGULATION_DELAY)
 

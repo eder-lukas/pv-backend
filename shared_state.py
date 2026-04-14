@@ -28,19 +28,19 @@ home_bat_min_soc = 80
 
 wallbox_states: dict[int, dict] = {
     1: {
-        "number_of_phases_used": 3,
+        "number_of_phases_used": 2,
         "priority": 2,
         "charging_state": 0,
-        "maximum_current": 0,
-        "solar_only_charging": True,
+        "maximum_current": 16000,
+        "solar_only_charging": False,
         "paused": False,
     },
     2: {
         "number_of_phases_used": 3,
         "priority": 1,
         "charging_state": 0,
-        "maximum_current": 0,
-        "solar_only_charging": True,
+        "maximum_current": 16000,
+        "solar_only_charging": False,
         "paused": False,
     },
 }
